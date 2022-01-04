@@ -68,7 +68,7 @@ void wordcount_insert_ordered(WordCount **wclist, WordCount *elem, bool less(con
 
 /* Sort a word count list in place */
 void wordcount_sort(WordCount **wclist, bool less(const WordCount *, const WordCount *));
-
+void free_words(WordCount **wclist);
 #endif /* word_count_h */
 
 

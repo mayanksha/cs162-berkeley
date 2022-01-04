@@ -1,0 +1,5 @@
+Your rst task will be to implement total word count. When executed, words will print the total number of
+words counted to stdout. At this point, you will not need to make edits to word_count.c. A complete
+implementation of the num_words() function can suce.
+A word is dened as a sequence of contiguous alphabetical characters of length greater than one. All words
+should be converted to their lower-case representation and be treated as not case-sensitive. The maximum
