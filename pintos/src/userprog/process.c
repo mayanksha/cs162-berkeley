@@ -192,6 +192,91 @@ static bool validate_segment(const struct Elf32_Phdr*, struct file*);
 static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t read_bytes,
                          uint32_t zero_bytes, bool writable);
 
+static int min(int a, int b) {
+  return (a < b) ? a : b;
+}
+
+#define MAX_ARGS_NUM 10
+#define MAX_ARG_LEN 15 
+
+const char argv[MAX_ARGS_NUM][MAX_ARG_LEN + 1];
+
+int tokenize(const char *file_name) {
+  /* tokenize the args firstly */
+  int argc = 0;
+  char *saveptr = NULL, *token = NULL;
+
+  token = strtok_r((char *) file_name, " ", &saveptr);
+  while (token != NULL && argc < MAX_ARGS_NUM) {
+    strlcpy(argv[argc++], token, min(strlen(token), MAX_ARG_LEN) + 1);
+    token = strtok_r(NULL, " ", &saveptr);
+  }
+
+  memset(argv[argc], '\0', MAX_ARG_LEN);
+
+  return argc;
+}
+
+static void fill_stack(int argc, void** esp) {
+    /* printf("[fill_stack] argc: %d\n", argc); */
+
+    void *curr_esp = *esp;
+    char *arg_stack_location[argc];
+
+    // Setup the actual arg strings firstly
+    for (int i = argc - 1; i >= 0; i--) {
+      int bytes_to_write = strlen(argv[i]) + 1;
+      int num_words = ((bytes_to_write + 4) / 4);
+
+      *esp -= bytes_to_write;
+      arg_stack_location[i] = *esp;
+
+      memcpy(*esp, argv[i], bytes_to_write);
+      // Write the remaining bytes with '\0' so as to make the memory 4 byte aligned
+      /* memset(*esp + bytes_to_write, '\0', bytes_to_write % 4); */
+    }
+
+    int total_bytes_to_be_written = (sizeof(char *) * (argc + 1)) + 
+      (sizeof(char **)  * 1) + (sizeof(int) * 1);
+
+    // Write the stack-align thingy with type uint8_t and value 0 (null)
+    int num_bytes_to_align = (16 - abs((((long long)*esp) - total_bytes_to_be_written) % 16LL)) % 16;
+
+    /* printf("[After] *esp = %p, total_bytes = %x, num_bytes_to_align = %x\n", *esp, total_bytes_to_be_written, num_bytes_to_align); */
+    *esp -= (sizeof(uint8_t) * num_bytes_to_align);
+    memset(*esp, '\0', sizeof(uint8_t) * num_bytes_to_align);
+
+    *esp -= (sizeof (char *));
+    memset(*esp, '\0', sizeof(char *));
+
+    // Insert the NULL sentinel
+/*     int num_sentinels = (argc % 4);
+ *     int total_sentinels = 1 + (num_sentinels == 0 ? 0 : 4 - num_sentinels); 
+ * 
+ *     for (int i = 0; i < total_sentinels; i++) {
+ *       *esp -= (sizeof (char *));
+ *       memset(*esp, '\0', sizeof(char *));
+ *     } */
+
+    for (int i = argc - 1; i >= 0; i--) {
+      *esp -= (sizeof (char *));
+      memcpy(*esp, &arg_stack_location[i], sizeof(char *));
+    }
+
+    void *arg_0_curr_location = *esp;
+
+    *esp -= (sizeof (char **));
+    memcpy(*esp, &arg_0_curr_location, sizeof(char **));
+
+    *esp -= (sizeof (int));
+    memcpy(*esp, &argc, sizeof(int));
+
+    *esp -= (sizeof (void *));
+
+    /* hex_dump(*esp, *esp, curr_esp - (*esp), true); */
+    return;
+}
+
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
@@ -202,7 +287,7 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
   struct file* file = NULL;
   off_t file_ofs;
   bool success = false;
-  int i;
+  int i = 0;
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create();
@@ -210,8 +295,10 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
     goto done;
   process_activate();
 
+  int argc = tokenize(file_name); 
+
   /* Open executable file. */
-  file = filesys_open(file_name);
+  file = filesys_open(argv[0]);
   if (file == NULL) {
     printf("load: %s: open failed\n", file_name);
     goto done;
@@ -278,6 +365,9 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
   /* Set up stack. */
   if (!setup_stack(esp))
     goto done;
+
+  /* Currently *esp = PHYS_BASE, so we need to setup the args now */
+  fill_stack(argc, esp);
 
   /* Start address. */
   *eip = (void (*)(void))ehdr.e_entry;
