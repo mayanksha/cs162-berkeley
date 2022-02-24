@@ -282,3 +282,5 @@ cscope.po.out
 
 ### PintOS ###
 pintos/**/build
+
+*.gdb_history

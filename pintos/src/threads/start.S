@@ -7,7 +7,7 @@
 #### switches from real mode to 32-bit protected mode and calls
 #### main().
 
-/* Flags in control register 0. */
+ # Flags in control register 0.
 #define CR0_PE 0x00000001      /* Protection Enable. */
 #define CR0_EM 0x00000004      /* (Floating-point) Emulation. */
 #define CR0_PG 0x80000000      /* Paging. */
@@ -147,7 +147,7 @@ start:
 #       We don't support floating point.
 
 	movl %cr0, %eax
-	orl $CR0_PE | CR0_PG | CR0_WP | CR0_EM, %eax
+	orl $CR0_PE | CR0_PG | CR0_WP, %eax
 	movl %eax, %cr0
 
 # We're now in protected mode in a 16-bit segment.  The CPU still has
